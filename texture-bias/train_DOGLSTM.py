@@ -69,7 +69,7 @@ def Rep_mask(f):
     return Lambda(func)  ##
 
 def common_representation(x1,x2):
-
+### Not Implemented #####
     return
 
 
@@ -91,7 +91,7 @@ class Texture:
 
         self.GlobalAveragePooling = GlobalAveragePooling2D_r(s_mask)
 
-
+        ### Not Implemented #####
 
 
 
