@@ -12,8 +12,17 @@ import numpy as np
 from skimage import transform
 import os
 import tarfile
-import urllib
+
 import tensorflow as tf
+import sys
+
+if sys.version_info[0] >= 3:
+    from urllib.request import urlretrieve
+else:
+    # Not Python 3 - today, it is most likely to be Python 2
+    # But note that this might need an update when Python 4
+    # might be around one day
+    from urllib import urlretrieve
 
 
 
@@ -79,13 +88,13 @@ def vgg_encoder():
         os.makedirs('weights')
     if not os.path.isfile('weights/vgg_16.ckpt'):
         print('Downloading the checkpoint ...')
-        urllib.urlretrieve("http://download.tensorflow.org/models/vgg_16_2016_08_28.tar.gz", "weights/vgg_16_2016_08_28.tar.gz")
+        urlretrieve("http://download.tensorflow.org/models/vgg_16_2016_08_28.tar.gz", "weights/vgg_16_2016_08_28.tar.gz")
         with tarfile.open('weights/vgg_16_2016_08_28.tar.gz', "r:gz") as tar:
             tar.extractall('weights/')
         os.remove('weights/vgg_16_2016_08_28.tar.gz')
         print('Download is complete !')
 
-    reader = tf.train.NewCheckpointReader('weights/vgg_16.ckpt')
+    reader = tf.train.load_checkpoint('weights/vgg_16.ckpt')
     debug_string = reader.debug_string()
 
     vgg16 = VGG16()
