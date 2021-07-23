@@ -1,3 +1,6 @@
+__authors__ = "Rituraj Dutta, Abdur R. Fayjie"
+__emails__ = "riturajdutta400@gmailcom, fayjie92@gmail.com"
+
 import os
 import argparse
 

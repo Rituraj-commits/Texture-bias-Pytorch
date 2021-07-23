@@ -1,219 +1,115 @@
+__authors__ = "Rituraj Dutta, Abdur R. Fayjie"
+__emails__ = "riturajdutta400@gmailcom, fayjie92@gmail.com"
+
+
 import torch
+from torch.autograd import Variable
 import torch.nn as nn
-from typing import List
-from collections import OrderedDict
+import torch.nn.functional as F
+from matplotlib.pyplot import imread
+import numpy as np
 
-
-def patch_first_conv(model, in_channels):
-    """Change first convolution layer input channels.
-    In case:
-        in_channels == 1 or in_channels == 2 -> reuse original weights
-        in_channels > 3 -> make random kaiming normal initialization
-    """
-
-    # get first conv
-    for module in model.modules():
-        if isinstance(module, nn.Conv2d):
-            break
-
-    # change input channels for first conv
-    module.in_channels = in_channels
-    weight = module.weight.detach()
-    reset = False
-
-    if in_channels == 1:
-        weight = weight.sum(1, keepdim=True)
-    elif in_channels == 2:
-        weight = weight[:, :2] * (3.0 / 2.0)
-    else:
-        reset = True
-        weight = torch.Tensor(
-            module.out_channels,
-            module.in_channels // module.groups,
-            *module.kernel_size
-        )
-
-    module.weight = nn.parameter.Parameter(weight)
-    if reset:
-        module.reset_parameters()
-
-
-def replace_strides_with_dilation(module, dilation_rate):
-    """Patch Conv2d modules replacing strides with dilation"""
-    for mod in module.modules():
-        if isinstance(mod, nn.Conv2d):
-            mod.stride = (1, 1)
-            mod.dilation = (dilation_rate, dilation_rate)
-            kh, kw = mod.kernel_size
-            mod.padding = ((kh // 2) * dilation_rate, (kh // 2) * dilation_rate)
-
-            # Kostyl for EfficientNet
-            if hasattr(mod, "static_padding"):
-                mod.static_padding = nn.Identity()
+from skimage import transform
+import os
+import tarfile
+import urllib
+import tensorflow as tf
 
 
 
 
+class VGG16(nn.Module):
+    def __init__(self):
+        super(VGG16, self).__init__()
+        # conv layers: (in_channel size, out_channels size, kernel_size, stride, padding)
+        self.conv1_1 = nn.Conv2d(3, 64, kernel_size=3, padding='same')
+        self.conv1_2 = nn.Conv2d(64, 64, kernel_size=3, padding='same')
 
-class EncoderMixin:
-    """Add encoder functionality such as:
-        - output channels specification of feature tensors (produced by encoder)
-        - patching first convolution for arbitrary input channels
-    """
+        self.conv2_1 = nn.Conv2d(64, 128, kernel_size=3, padding='same')
+        self.conv2_2 = nn.Conv2d(128, 128, kernel_size=3, padding='same')
 
-    @property
-    def out_channels(self):
-        """Return channels dimensions for each tensor of forward output of encoder"""
-        return self._out_channels[: self._depth + 1]
+        self.conv3_1 = nn.Conv2d(128, 256, kernel_size=3, padding='same')
+        self.conv3_2 = nn.Conv2d(256, 256, kernel_size=3, padding='same')
+        self.conv3_3 = nn.Conv2d(256, 256, kernel_size=3, padding='same')
 
-    def set_in_channels(self, in_channels):
-        """Change first convolution channels"""
-        if in_channels == 3:
-            return
+        self.conv4_1 = nn.Conv2d(256, 512, kernel_size=3, padding='same')
+        self.conv4_2 = nn.Conv2d(512, 512, kernel_size=3, padding='same')
+        self.conv4_3 = nn.Conv2d(512, 512, kernel_size=3, padding='same')
 
-        self._in_channels = in_channels
-        if self._out_channels[0] == 3:
-            self._out_channels = tuple([in_channels] + list(self._out_channels)[1:])
+        self.conv5_1 = nn.Conv2d(512, 512, kernel_size=3, padding='same')
+        self.conv5_2 = nn.Conv2d(512, 512, kernel_size=3, padding='same')
+        self.conv5_3 = nn.Conv2d(512, 512, kernel_size=3, padding='same')
 
-        patch_first_conv(model=self, in_channels=in_channels)
+        # max pooling (kernel_size, stride)
+        self.pool = nn.MaxPool2d(2, 2)
 
-    def get_stages(self):
-        """Method should be overridden in encoder"""
-        raise NotImplementedError
-
-    def make_dilated(self, stage_list, dilation_list):
-        stages = self.get_stages()
-        for stage_indx, dilation_rate in zip(stage_list, dilation_list):
-            replace_strides_with_dilation(
-                module=stages[stage_indx],
-                dilation_rate=dilation_rate,
-            )
-
-import torch.nn as nn
-from efficientnet_pytorch import EfficientNet, model
-from efficientnet_pytorch.utils import url_map, url_map_advprop, get_model_params
-
-
-
-class EfficientNetEncoder(EfficientNet, EncoderMixin):
-    def __init__(self, stage_idxs, out_channels, model_name, depth=5):
-
-        blocks_args, global_params = get_model_params(model_name, override_params=None)
-        super().__init__(blocks_args, global_params)
-
-        self._stage_idxs = stage_idxs
-        self._out_channels = out_channels
-        self._depth = depth
-        self._in_channels = 3
-        #self.scse = ChannelSpatialSELayer(self._in_channels)
        
 
-        del self._fc
+    def forward(self, x, training=True):
+        x = F.relu(self.conv1_1(x))
+        x = F.relu(self.conv1_2(x))
+        x = self.pool(x)
+        x = F.relu(self.conv2_1(x))
+        x = F.relu(self.conv2_2(x))
+        x = self.pool(x)
+        x = F.relu(self.conv3_1(x))
+        x = F.relu(self.conv3_2(x))
+        x3 = F.relu(self.conv3_3(x))
+       
+        x = F.relu(self.conv4_1(x3))
+        x = F.relu(self.conv4_2(x))
+        x4 = F.relu(self.conv4_3(x))
+       
+        x = F.relu(self.conv5_1(x4))
+        x = F.relu(self.conv5_2(x))
+        x = F.relu(self.conv5_3(x))
 
-    def get_stages(self):
-        return [
-            nn.Identity(),
-            nn.Sequential(self._conv_stem, self._bn0, self._swish),
-            self._blocks[:self._stage_idxs[0]],
-            self._blocks[self._stage_idxs[0]:self._stage_idxs[1]],
-            self._blocks[self._stage_idxs[1]:self._stage_idxs[2]],
-            self._blocks[self._stage_idxs[2]:],
-        ]
-
-    def forward(self, x):
-        stages = self.get_stages()
-        #print(stages)
-
-        block_number = 0.
-        drop_connect_rate = self._global_params.drop_connect_rate
-        #print(drop_connect_rate)
-
-        #features = []
-        for i in range(self._depth + 1):
-
-            # Identity and Sequential stages
-            if i < 2:
-                x = stages[i](x)
-
-            # Block stages need drop_connect rate
-            else:
-                for module in stages[i]:
-                    drop_connect = drop_connect_rate * block_number / len(self._blocks)
-                    block_number += 1.
-                    x = module(x, drop_connect)
-
-            #features.append(x)
-            #in_ch = x.shape[1]
-            #print(in_ch)
-            #scse = ChannelSpatialSELayer(in_ch)
-            
-            #print(x.shape)
-            
-          
+        x = torch.cat([torch.cat([x3,x4],dim=1),x],dim=1)
+  
         return x
 
-def _get_pretrained_settings(encoder):
-    pretrained_settings = {
-        "imagenet": {
-            "mean": [0.485, 0.456, 0.406],
-            "std": [0.229, 0.224, 0.225],
-            "url": url_map[encoder],
-            "input_space": "RGB",
-            "input_range": [0, 1],
-        },
-    }
-    return pretrained_settings
-
-efficient_net_encoders = {
-    "efficientnet-b1": {
-        "encoder": EfficientNetEncoder,
-        "pretrained_settings": _get_pretrained_settings("efficientnet-b1"),
-        "params": {
-            "out_channels": (3, 32, 24, 40, 112, 320),
-            "stage_idxs": (5, 8, 16, 23),
-            "model_name": "efficientnet-b1",
-        },
-    },
-}
-
-
-import torch.utils.model_zoo as model_zoo
-
-encoders = {}
-encoders.update(efficient_net_encoders)
-
-def get_encoder(name, in_channels=3, depth=5, weights=None):
-
-    if weights == None:
-      print("Training from Scratch !!")
-
-    try:
-        Encoder = encoders[name]["encoder"]
-       
-    except KeyError:
-        raise KeyError("Wrong encoder name `{}`, supported encoders: {}".format(name, list(encoders.keys())))
+ 
 
 
 
-    params = encoders[name]["params"]
-   
+def vgg_encoder():
     
-    params.update(depth=depth)
+    # Download weights
+    if not os.path.isdir('weights'):
+        os.makedirs('weights')
+    if not os.path.isfile('weights/vgg_16.ckpt'):
+        print('Downloading the checkpoint ...')
+        urllib.urlretrieve("http://download.tensorflow.org/models/vgg_16_2016_08_28.tar.gz", "weights/vgg_16_2016_08_28.tar.gz")
+        with tarfile.open('weights/vgg_16_2016_08_28.tar.gz', "r:gz") as tar:
+            tar.extractall('weights/')
+        os.remove('weights/vgg_16_2016_08_28.tar.gz')
+        print('Download is complete !')
+
+    reader = tf.train.NewCheckpointReader('weights/vgg_16.ckpt')
+    debug_string = reader.debug_string()
+
+    vgg16 = VGG16()
+
+    # load the weights from the ckpt file (TensorFlow format)
+    load_dic = {}
+    for l in list(vgg16.state_dict()):
+        if 'conv' in l:
+            tensor_to_load = 'vgg_16/conv{}/{}/{}{}'.format(l[4], l[:7], l[8:], 's' if 'weight' in l else 'es')
+            v_tensor = reader.get_tensor(tensor_to_load)
+            if 'weight' in l:
+                v_tensor = np.transpose(v_tensor, (3, 2, 1, 0))
+            else:
+                v_tensor = np.transpose(v_tensor)
+            load_dic[l] = torch.from_numpy(v_tensor).float()
+        if 'fc' in l:
+            tensor_to_load = 'vgg_16/fc{}/{}{}'.format(l[2], l[4:], 's' if 'weight' in l else 'es')
+            v_tensor = reader.get_tensor(tensor_to_load)
+            if 'weight' in l:
+                v_tensor = np.transpose(v_tensor, (3, 2, 1, 0))
+            else:
+                v_tensor = np.transpose(v_tensor)
+            load_dic[l] = torch.from_numpy(v_tensor).float()
+
+    vgg16.load_state_dict(load_dic)
     
-   
-    encoder = Encoder(**params)
-
-    if weights is not None:
-        try:
-            settings = encoders[name]["pretrained_settings"][weights]
-        except KeyError:
-            raise KeyError("Wrong pretrained weights `{}` for encoder `{}`. Available options are: {}".format(
-                weights, name, list(encoders[name]["pretrained_settings"].keys()),
-            ))
-        encoder.load_state_dict(model_zoo.load_url(settings["url"]))
-
-    encoder.set_in_channels(in_channels)
-    
-
-    return encoder
-
+    return  vgg16

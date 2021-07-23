@@ -1,6 +1,7 @@
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
+__authors__ = "Rituraj Dutta, Abdur R. Fayjie"
+__emails__ = "riturajdutta400@gmailcom, fayjie92@gmail.com"
+
+
 import os
 import numpy as np
 import random 
@@ -25,17 +26,17 @@ def get_episode(opt, setX):
     indx_c = random.sample(range(0, len(setX)), opt.nway)
     indx_s = random.sample(range(1, opt.class_samples+1), opt.class_samples)
 
-    support = np.zeros([opt.nway, opt.kshot, opt.img_h, opt.img_w, 3], dtype = np.float32)
-    smasks  = np.zeros([opt.nway, opt.kshot, 224,        224,        1], dtype = np.float32)
-    query   = np.zeros([opt.nway,            opt.img_h, opt.img_w, 3], dtype = np.float32)      
-    qmask   = np.zeros([opt.nway,            opt.img_h, opt.img_w, 1], dtype = np.float32)  
+    support = np.zeros([opt.nway, opt.kshot, opt.img_h, opt.img_w, 3], dtype = np.float32)   ## (5,1,224,224,3)
+    smasks  = np.zeros([opt.nway, opt.kshot, 56,        56,        1], dtype = np.float32)   ## (5,1,56,56,1)
+    query   = np.zeros([opt.nway,            opt.img_h, opt.img_w, 3], dtype = np.float32)   ## (5,224,224,3) 
+    qmask   = np.zeros([opt.nway,            opt.img_h, opt.img_w, 1], dtype = np.float32)   ## (5,224,224,1)
                 
     for idx in range(len(indx_c)):
         for idy in range(opt.kshot): # For support set 
             s_img = cv2.imread(opt.data_path + setX[indx_c[idx]] + '/' + str(indx_s[idy]) + '.jpg' )
             s_msk = cv2.imread(opt.data_path + setX[indx_c[idx]] + '/' + str(indx_s[idy]) + '.png' )
             s_img = cv2.resize(s_img,(opt.img_h, opt.img_w))
-            s_msk = cv2.resize(s_msk,(224,        224))        
+            s_msk = cv2.resize(s_msk,(56,        56))        
             s_msk = s_msk /255.
             s_msk = np.where(s_msk > 0.5, 1., 0.)
             support[idx, idy] = s_img
