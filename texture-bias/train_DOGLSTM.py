@@ -151,7 +151,7 @@ class Texture(nn.Module):
         self.Sigma3_layer = TimeDistributed(nn.Conv2d(in_channels=128,out_channels=128,kernel_size=kernet_shapes[2],groups=128,padding='same',bias=False),tdim=1)
         self.Sigma4_layer = TimeDistributed(nn.Conv2d(in_channels=128,out_channels=128,kernel_size=kernet_shapes[3],groups=128,padding='same',bias=False),tdim=1)
 
-        ## Manuallu set Gaussian Weights and make them non-trainable
+        ## Manually set Gaussian Weights and make them non-trainable
 
         with torch.no_grad():
             self.Sigma1_layer.weight = nn.parameter.Parameter(Sigma1_kernel,requires_grad=False)
