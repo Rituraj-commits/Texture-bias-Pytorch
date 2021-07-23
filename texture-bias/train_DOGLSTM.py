@@ -51,6 +51,7 @@ def get_kernel_gussian(kernel_size, Sigma=1, in_channels = 320):
     return kernel_weights
 
 ## Kernel weights for Gussian pyramid
+
 Sigma1_kernel = get_kernel_gussian(kernel_size = kernet_shapes[0], Sigma = sigma*np.power(k_value, 1), in_channels = 128)
 Sigma2_kernel = get_kernel_gussian(kernel_size = kernet_shapes[1], Sigma = sigma*np.power(k_value, 2), in_channels = 128)    
 Sigma3_kernel = get_kernel_gussian(kernel_size = kernet_shapes[2], Sigma = sigma*np.power(k_value, 3), in_channels = 128)     
@@ -149,6 +150,8 @@ class Texture(nn.Module):
         self.Sigma2_layer = TimeDistributed(nn.Conv2d(in_channels=128,out_channels=128,kernel_size=kernet_shapes[1],groups=128,padding='same',bias=False),tdim=1)
         self.Sigma3_layer = TimeDistributed(nn.Conv2d(in_channels=128,out_channels=128,kernel_size=kernet_shapes[2],groups=128,padding='same',bias=False),tdim=1)
         self.Sigma4_layer = TimeDistributed(nn.Conv2d(in_channels=128,out_channels=128,kernel_size=kernet_shapes[3],groups=128,padding='same',bias=False),tdim=1)
+
+        ## Manuallu set Gaussian Weights and make them non-trainable
 
         with torch.no_grad():
             self.Sigma1_layer.weight = nn.parameter.Parameter(Sigma1_kernel,requires_grad=False)
