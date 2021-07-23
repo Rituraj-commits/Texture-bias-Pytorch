@@ -243,7 +243,7 @@ class ConvLSTM(nn.Module):
             output_inv.reverse() 
             output_inv = torch.stack((output_inv), dim=1)
             layer_output = torch.cat((output_inner, output_inv), dim=2)
-            last_state_inv = [h_inv, c_inv]
+            last_state_inv = h_inv
         ###################################
         
         return last_state_inv
@@ -255,10 +255,3 @@ class ConvLSTM(nn.Module):
             init_states_bw = self.cell_bw.init_hidden(batch_size)
         return init_states_fw, init_states_bw
 
-x= torch.rand((1, 4, 128, 56, 56)).cuda()
-convlstm = ConvLSTM(input_dim=128,img_size=(56,56), hidden_dim=128, kernel_size=(3, 3), 
-                               cnn_dropout = 0.0,
-                               rnn_dropout=0.0, batch_first=True, bias=True,bidirectional=True).cuda()
-output = convlstm(x)
-print(output[0].shape)  ## Outputs hidden state h as defined Line No 243
-#print(output[1].shape)  ## Ouputs memory c as defined in Line No 243
