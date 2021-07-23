@@ -287,7 +287,7 @@ def train():
             S_input = kshot_encoder(Variable(samples).cuda(GPU))      
             Q_input = encoder(Variable(batches).cuda(GPU))
 
-            texture = texture_model(S_input,Variable(sample_labels),Q_input)
+            texture = texture_model(S_input,Variable(sample_labels).cuda(GPU),Q_input)
 
             output = decoder(texture)
 
@@ -304,7 +304,7 @@ def train():
             epoch_loss += loss.cpu().data.numpy()
 
 
-            if (idx % 50) == 0:
+            if ((idx+1)% 50) == 0:
                 print ('Epoch>>',(ep+1),'>> Itteration:', (idx+1),'/',options.iterations,' >>> Loss:', epoch_loss/(idx+1))
             
           
