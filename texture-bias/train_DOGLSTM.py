@@ -42,7 +42,7 @@ kernet_shapes = [3, 5, 7, 9]
 k_value = np.power(2, 1/3)
 sigma   = 1.6
 
-def get_kernel_gussian(kernel_size, Sigma=1, in_channels = 320):
+def get_kernel_gussian(kernel_size, Sigma=1, in_channels = 128):
     kernel_weights = cv2.getGaussianKernel(ksize=kernel_size, sigma= Sigma)
     kernel_weights = kernel_weights * kernel_weights.T
     kernel_weights = np.expand_dims(kernel_weights, axis=-1)
@@ -100,8 +100,8 @@ class TimeDistributed(nn.Module):
 
 def GlobalAveragePooling2D_r(f):
     def func(x):
-        repc = int(x.shape[1])
-        m = torch.repeat_interleave(f,repc,dim=1)
+        repc = int(x.shape[2])
+        m = torch.repeat_interleave(f,repc,dim=2)
         x = torch.mul(x,m)
         repx = int(x.shape[3])
         repy = int(x.shape[4])
@@ -154,10 +154,10 @@ class Texture(nn.Module):
         ## Manually set Gaussian Weights and make them non-trainable
 
         with torch.no_grad():
-            self.Sigma1_layer.weight = nn.parameter.Parameter(Sigma1_kernel,requires_grad=False)
-            self.Sigma2_layer.weight = nn.parameter.Parameter(Sigma2_kernel,requires_grad=False)
-            self.Sigma3_layer.weight = nn.parameter.Parameter(Sigma3_kernel,requires_grad=False)
-            self.Sigma4_layer.weight = nn.parameter.Parameter(Sigma4_kernel,requires_grad=False)
+            self.Sigma1_layer.weight = nn.parameter.Parameter(torch.from_numpy(Sigma1_kernel),requires_grad=False)
+            self.Sigma2_layer.weight = nn.parameter.Parameter(torch.from_numpy(Sigma2_kernel),requires_grad=False)
+            self.Sigma3_layer.weight = nn.parameter.Parameter(torch.from_numpy(Sigma3_kernel),requires_grad=False)
+            self.Sigma4_layer.weight = nn.parameter.Parameter(torch.from_numpy(Sigma4_kernel),requires_grad=False)
 
 
         self.CommonRepresentation = common_representation()
@@ -201,21 +201,32 @@ class Decoder(nn.Module):
     def __init__(self):
         super().__init__()
         
-        self.Conv2dReLU = nn.Sequential(
+        self.layer = nn.Sequential(
             nn.Conv2d(in_channels=128,out_channels=128,kernel_size=(3,3),padding='same'),
-            nn.BatchNorm2d(num_features=128),
-            nn.ReLU(inplace=False)
-        )
+            nn.BatchNorm2d(128),
+            nn.ReLU(inplace=False),
+            nn.UpsamplingNearest2d(scale_factor=2),
 
-        self.UpSampling2D = nn.Upsample(scale_factor=(2,2),mode='bilinear',align_corners=True)
+            nn.Conv2d(in_channels=128,out_channels=128,kernel_size=(3,3),padding='same'),
+            nn.BatchNorm2d(128),
+            nn.ReLU(inplace=False),
+            nn.UpsamplingNearest2d(scale_factor=2),
 
-        self.final = nn.Sequential(
+            nn.Conv2d(in_channels=128,out_channels=128,kernel_size=(3,3),padding='same'),
+            nn.BatchNorm2d(128),
+            nn.ReLU(inplace=False),
+            
             nn.Conv2d(in_channels=128,out_channels=64,kernel_size=(3,3),padding='same'),
             nn.ReLU(inplace=False),
-            nn.Conv2d(in_channels=64,out_channels=32,padding='same',kernel_size=(3,3)),
+
+            nn.Conv2d(in_channels=64,out_channels=2,kernel_size=(3,3),padding='same'),
             nn.ReLU(inplace=False),
-            nn.Conv2d(in_channels=32,out_channels=1,padding='same',kernel_size=(3,3)),
+
+            nn.Conv2d(in_channels=2,out_channels=1,kernel_size=(1,1)),
             nn.Sigmoid()
+
+
+
         )
         
 
@@ -224,15 +235,7 @@ class Decoder(nn.Module):
 
     def forward(self,x):
 
-        x = self.Conv2dReLU(x)
-        x = self.UpSampling2D(x)
-
-        x = self.Conv2dReLU(x)
-        x = self.UpSampling2D(x)
-
-        x = self.Conv2dReLU(x)
-
-        x = self.final(x)
+        x = self.layer(x)
 
         return x
 
@@ -255,7 +258,7 @@ def train():
 
     decoder = Decoder()
     texture_model = Texture()
-   
+    #print(encoder)
 
     encoder.cuda(GPU)
     kshot_encoder.cuda(GPU)
@@ -267,7 +270,6 @@ def train():
     encoder_optim = torch.optim.Adam(encoder.parameters(),lr=LEARNING_RATE)
     kshot_encoder_optim = torch.optim.Adam(kshot_encoder.parameters(),lr=LEARNING_RATE)
     texture_optim = torch.optim.Adam(texture_model.parameters(),lr=LEARNING_RATE)
-
     decoder_optim = torch.optim.Adam(decoder.parameters(),lr=LEARNING_RATE)
 
 
@@ -307,16 +309,68 @@ def train():
             if ((idx+1)% 50) == 0:
                 print ('Epoch>>',(ep+1),'>> Itteration:', (idx+1),'/',options.iterations,' >>> Loss:', epoch_loss/(idx+1))
             
+      
+
+        #### VALIDATION LOOP ####
+
+        global Best_performance
+        global Valid_miou
+        overall_miou = 0.0
+
+        for idx in range (options.it_eval):
+
+            
+            samples, sample_labels, batches, batch_labels = U.get_episode(options,Test_list)
+            
+            S_input = kshot_encoder(Variable(samples).cuda(GPU))      
+            Q_input = encoder(Variable(batches).cuda(GPU))
+
+            texture = texture_model(S_input,Variable(sample_labels).cuda(GPU),Q_input)
+
+            output = decoder(texture)
+
+            bce = nn.BCELoss().cuda(GPU)
+            loss = bce(output,Variable(batch_labels).cuda(GPU))
+         
+            ep_miou       = U.compute_miou(output, batch_labels)   ## Calculate Mean IoU
+            overall_miou += ep_miou
+
+        print('Epoch:', ep+1 ,'Validation miou >> ', (overall_miou / options.it_eval))   
+
+        # save model weights
+
+        Valid_miou.append((overall_miou / options.it_eval))
+        if Best_performance<(overall_miou / options.it_eval):
+            Best_performance = (overall_miou / options.it_eval)
+
+            torch.save({'encoder_state_dict':encoder.state_dict(),
+                        'optimizer_state_dict':encoder_optim.state_dict()},
+                        str("./%s/encoder_" % options.ModelSavePath + str(ep) + '_' + str(options.nway) +"_way_" + str(options.kshot) +"shot.pkl")
+                       )
+                    
+            
+            
+            torch.save({'kshot_encoder_state_dict':kshot_encoder.state_dict(),
+                        'kshot_encoder_optim_state_dict':kshot_encoder_optim.state_dict()},
+                        str("./%s/kshot_encoder_" % options.ModelSavePath + str(ep) + '_' + str(options.nway) +"_way_" + str(options.kshot) +"shot.pkl")
+                      )
+            
+            
+            torch.save({'texture_model_state_dict':texture_model.state_dict(),
+                        'texture_optim_state_dict':texture_optim.state_dict()},
+                        str("./%s/texture_model_" % options.ModelSavePath + str(ep) + '_' + str(options.nway) +"_way_" + str(options.kshot) +"shot.pkl")
+                      )
+            torch.save({'decoder_state_dict':decoder.state_dict(),
+                      'decoder_optim_state_dict':decoder_optim.state_dict()},
+                      str("./%s/decoder_" % options.ModelSavePath + str(ep) + '_' + str(options.nway) +"_way_" + str(options.kshot) +"shot.pkl")
+                      
+                       )
+            
+            print("save networks for epoch: ",ep+1)
+    
           
-          
+train()
 
-   
-
-
-
-if __name__ == "main":
-
-    train()
     
             
          

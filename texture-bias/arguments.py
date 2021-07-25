@@ -7,11 +7,15 @@ import argparse
 
 def get_parser():
     parser = argparse.ArgumentParser()
-                    
+
+    parser.add_argument("-msp","--ModelSavePath",
+                        type=str,
+                        default='vgg16_5way_1shot')
+
     parser.add_argument('-img_p', '--data_path',
                         type=str,
                         help='path to image sources',
-                        default = './fewshot_data/')
+                        default = 'fewshot/fss1000/')
 
     parser.add_argument('-nw', '--nway',
                         type=int,

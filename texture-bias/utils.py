@@ -72,6 +72,8 @@ def get_episode(opt, setX):
 
 def compute_miou(Es_mask, qmask):
     ious = 0.0
+    Es_mask = Es_mask.data.cpu().numpy()
+    qmask = qmask.numpy()
     Es_mask = np.where(Es_mask> 0.5, 1. , 0.)
     for idx in range(Es_mask.shape[0]):
         notTrue = 1 -  qmask[idx]

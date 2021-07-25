@@ -122,3 +122,5 @@ def vgg_encoder():
     vgg16.load_state_dict(load_dic)
     
     return  vgg16
+
+
