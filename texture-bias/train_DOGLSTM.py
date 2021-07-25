@@ -312,35 +312,46 @@ def train():
       
 
         #### VALIDATION LOOP ####
+        
+        if not os.path.exists(options.ModelSavePath):
+            os.makedirs(options.ModelSavePath)
 
-        global Best_performance
-        global Valid_miou
-        overall_miou = 0.0
+        with torch.no_grad():
+          
+          global Best_performance
+          global Valid_miou
+          overall_miou = 0.0
 
-        for idx in range (options.it_eval):
+          for idx in range (options.it_eval):
 
-            
-            samples, sample_labels, batches, batch_labels = U.get_episode(options,Test_list)
-            
-            S_input = kshot_encoder(Variable(samples).cuda(GPU))      
-            Q_input = encoder(Variable(batches).cuda(GPU))
+              
+              samples, sample_labels, batches, batch_labels = U.get_episode(options,Test_list)
+              
+              S_input = kshot_encoder(Variable(samples,requires_grad=False).cuda(GPU))      
+              Q_input = encoder(Variable(batches,requires_grad=False).cuda(GPU))
 
-            texture = texture_model(S_input,Variable(sample_labels).cuda(GPU),Q_input)
+              texture = texture_model(S_input,Variable(sample_labels,requires_grad=False).cuda(GPU),Q_input)
 
-            output = decoder(texture)
+              output = decoder(texture)
 
-            bce = nn.BCELoss().cuda(GPU)
-            loss = bce(output,Variable(batch_labels).cuda(GPU))
-         
-            ep_miou       = U.compute_miou(output, batch_labels)   ## Calculate Mean IoU
-            overall_miou += ep_miou
+              bce = nn.BCELoss().cuda(GPU)
+              loss = bce(output,Variable(batch_labels,requires_grad=False).cuda(GPU))
+          
+              ep_miou       = U.compute_miou(output, batch_labels)   ## Calculate Mean IoU
+              overall_miou += ep_miou
 
-        print('Epoch:', ep+1 ,'Validation miou >> ', (overall_miou / options.it_eval))   
 
-        # save model weights
 
-        Valid_miou.append((overall_miou / options.it_eval))
+
+          print('Epoch:', ep+1 ,'Validation miou >> ', (overall_miou / options.it_eval))   
+
+          # save model weights
+
+          Valid_miou.append((overall_miou / options.it_eval))
+
+
         if Best_performance<(overall_miou / options.it_eval):
+
             Best_performance = (overall_miou / options.it_eval)
 
             torch.save({'encoder_state_dict':encoder.state_dict(),
@@ -348,7 +359,6 @@ def train():
                         str("./%s/encoder_" % options.ModelSavePath + str(ep) + '_' + str(options.nway) +"_way_" + str(options.kshot) +"shot.pkl")
                        )
                     
-            
             
             torch.save({'kshot_encoder_state_dict':kshot_encoder.state_dict(),
                         'kshot_encoder_optim_state_dict':kshot_encoder_optim.state_dict()},
@@ -360,14 +370,15 @@ def train():
                         'texture_optim_state_dict':texture_optim.state_dict()},
                         str("./%s/texture_model_" % options.ModelSavePath + str(ep) + '_' + str(options.nway) +"_way_" + str(options.kshot) +"shot.pkl")
                       )
+            
             torch.save({'decoder_state_dict':decoder.state_dict(),
-                      'decoder_optim_state_dict':decoder_optim.state_dict()},
-                      str("./%s/decoder_" % options.ModelSavePath + str(ep) + '_' + str(options.nway) +"_way_" + str(options.kshot) +"shot.pkl")
+                        'decoder_optim_state_dict':decoder_optim.state_dict()},
+                        str("./%s/decoder_" % options.ModelSavePath + str(ep) + '_' + str(options.nway) +"_way_" + str(options.kshot) +"shot.pkl")
                       
                        )
             
             print("save networks for epoch: ",ep+1)
-    
+
           
 train()
 
